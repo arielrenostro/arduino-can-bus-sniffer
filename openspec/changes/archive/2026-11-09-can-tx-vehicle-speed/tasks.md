@@ -10,7 +10,7 @@
 
 ## 3. Firmware
 
-- [ ] 3.1 Em `src/main.cpp`, ao receber um `0x388` com a substituição ligada, enviar a cópia com a velocidade trocada (contando `sent` e `failed`), e manter o controlador em modo normal enquanto o `0x208` ou a velocidade estiver ligado; verificar com `pio run` (RAM abaixo de 90%) e, na bancada, com `v 60` e `v show`, observando o velocímetro do painel (spec `vehicle-speed-override`, spec modificada `can-bus-capture`)
+- [x] 3.1 Em `src/main.cpp`, ao receber um `0x388` com a substituição ligada, enviar a cópia com a velocidade trocada (contando `sent` e `failed`), e manter o controlador em modo normal enquanto o `0x208` ou a velocidade estiver ligado; verificar com `pio run` (RAM abaixo de 90%) e, na bancada, com `v 60` e `v show`, observando o velocímetro do painel (spec `vehicle-speed-override`, spec modificada `can-bus-capture`)
 
 ## 4. Documentação
 

@@ -9,6 +9,7 @@
 #include "EngineDynamics.h"
 #include "FrameRing.h"
 #include "IdFilter.h"
+#include "LampRequest.h"
 #include "LineFormat.h"
 #include "VehicleSpeed.h"
 #include "config.h"
@@ -23,6 +24,7 @@ static Filter filter;
 static Stats stats;
 static TxState tx;
 static SpeedState speed;
+static LampState lamp;
 static uint32_t controllerOverflows = 0;  // estouros dos buffers do MCP2515
 static bool captureOn = false;
 static uint8_t initError = 0;
@@ -44,7 +46,8 @@ static void emitP(const char* flashText) {
   emitLine(buf);
 }
 
-static CommandProcessor<CFG_FILTER_CAPACITY> commands(filter, stats, emitLine, &tx, &speed);
+static CommandProcessor<CFG_FILTER_CAPACITY> commands(filter, stats, emitLine, &tx, &speed,
+                                                         &lamp);
 
 static void syncLost() { stats.lost = ring.lost() + controllerOverflows; }
 
@@ -72,12 +75,12 @@ static void initCapture() {
     return;
   }
 
-  char buf[140];
+  char buf[160];
   char* p = text::putStrP(buf, PSTR("# can-sniffer: captura a "));
   p = text::putUint(p, CFG_CAN_SPEED_KBPS);
   p = text::putStrP(p, PSTR(" kbit/s, cristal "));
   p = text::putUint(p, CFG_CAN_CLOCK_MHZ);
-  p = text::putStrP(p, PSTR(" MHz, somente escuta (f = filtro, s = estado, t = enviar 0x208, v = velocidade)"));
+  p = text::putStrP(p, PSTR(" MHz, somente escuta (f = filtro, s = estado, t = enviar 0x208, v = velocidade, l = lampadas)"));
   *p = '\0';
   emitLine(buf);
   captureOn = true;
@@ -103,6 +106,23 @@ static void echoSpeed(const can_frame& cf) {
   }
 }
 
+// Substituição de lâmpadas: mesma ideia, para o 0x488 da ECU (só os bits 1 e 2
+// do byte 4 mudam; o resto do quadro é o da ECU).
+static void echoLamp(const can_frame& cf) {
+  uint8_t data[8];
+  if (!buildLampFrame(cf.data, cf.can_dlc, lamp.preheat, lamp.mil, data)) return;
+
+  can_frame f;
+  f.can_id = kLampFrameId;
+  f.can_dlc = cf.can_dlc;
+  for (uint8_t i = 0; i < cf.can_dlc; i++) f.data[i] = data[i];
+  if (mcp.sendMessage(&f) == MCP2515::ERROR_OK) {
+    lamp.sent++;
+  } else {
+    lamp.failed++;
+  }
+}
+
 static void onFrame(const can_frame& cf, uint32_t now) {
   stats.received++;
 
@@ -111,6 +131,7 @@ static void onFrame(const can_frame& cf, uint32_t now) {
 
   const uint16_t id = (uint16_t)cf.can_id;
   if (id == kSpeedFrameId && speed.active && txRunning) echoSpeed(cf);
+  if (id == kLampFrameId && lamp.active && txRunning) echoLamp(cf);
 
   if (!filter.allows(id)) return;  // não ocupa espaço no ring
 
@@ -155,11 +176,11 @@ static void drainController() {
 
 // --- Envio do 0x208 ----------------------------------------------------
 
-// O controlador só transmite fora do modo somente escuta. Segue os comandos t
-// e v: liga o modo normal quando qualquer um dos dois envios começa e volta a
-// somente escuta quando ambos estão desligados.
+// O controlador só transmite fora do modo somente escuta. Segue os comandos t,
+// v e l: liga o modo normal quando qualquer um dos envios começa e volta a
+// somente escuta quando todos estão desligados.
 static void updateTxMode() {
-  const bool want = tx.active || speed.active;
+  const bool want = tx.active || speed.active || lamp.active;
   if (want == txRunning) return;
 
   if (want) {
@@ -168,6 +189,7 @@ static void updateTxMode() {
     } else {
       tx.active = false;
       speed.active = false;
+      lamp.clear();
       mcp.setListenOnlyMode();
       emitP(PSTR("# erro: nao foi possivel entrar em modo normal; envio desligado"));
     }
@@ -248,9 +270,10 @@ void loop() {
     drainController();
     printPending();
   } else {
-    if (tx.active || speed.active) {  // sem controlador inicializado não há como enviar
+    if (tx.active || speed.active || lamp.active) {  // sem controlador não há como enviar
       tx.active = false;
       speed.active = false;
+      lamp.clear();
       emitP(PSTR("# erro: MCP2515 nao inicializado; envio desligado"));
     }
     if (millis() - lastInitErrorMs >= 5000) {

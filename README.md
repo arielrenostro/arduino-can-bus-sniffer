@@ -22,7 +22,7 @@ Antes de ligar ao carro:
 - **Jumper de 120 Ω do módulo (geralmente J1): deixe aberto.** O barramento já é terminado nas duas pontas; uma terminação extra carrega a linha e prejudica a leitura.
 - **GND comum:** o GND do módulo precisa ser o mesmo do carro.
 - **Barramento certo:** o MCP2515 só lê **CAN**. O barramento de conforto do 206 é **VAN** (125 kbit/s), que não é CAN. Ligue no HS.IS (CAN H/L a 250 kbit/s nesta arquitetura; outras arquiteturas PSA usam 500 kbit/s).
-- O firmware **inicia sempre em somente escuta**: não transmite quadros, nem ACK, nem quadros de erro. Só transmite depois de um comando `t` ou `v` (ver "Enviando o 0x208" e "Substituindo a velocidade").
+- O firmware **inicia sempre em somente escuta**: não transmite quadros, nem ACK, nem quadros de erro. Só transmite depois de um comando `t`, `v` ou `l` (ver "Enviando o 0x208", "Substituindo a velocidade" e "Pedidos de lâmpada").
 
 ## Uso
 
@@ -34,7 +34,7 @@ pio device monitor       # 500000 baud (monitor_speed já está no platformio.in
 Ao iniciar, aparece:
 
 ```
-# can-sniffer: captura a 250 kbit/s, cristal 8 MHz, somente escuta (f = filtro, s = estado, t = enviar 0x208, v = velocidade)
+# can-sniffer: captura a 250 kbit/s, cristal 8 MHz, somente escuta (f = filtro, s = estado, t = enviar 0x208, v = velocidade, l = lampadas)
 ```
 
 Cada quadro vira uma linha `<ms> <ID> [<n>] <bytes em hex>`:
@@ -128,6 +128,34 @@ Exemplo de `v show`:
 - **A BSI recebe dois `0x388` por ciclo** (o da ECU, com a velocidade dela, e o seu logo depois). Não há garantia de qual ela usa; se o velocímetro não mostrar o valor pedido, avise.
 - **A escala (km/h × 0,01) vem do PSA-RE para outras arquiteturas e não está confirmada para o 206.** Calibre pelo velocímetro: `v 60` deve marcar cerca de 60.
 - Se o **odômetro ou o parcial** mexerem, desligue na hora com `v off`.
+
+## Pedidos de lâmpada (0x488)
+
+O `0x488` (ENGINE_DATA, enviado pela ECU à BSI a cada 100 ms) tem, no byte 4, o pedido da **lâmpada de velas** (bit 1, `PREHEAT_LAMP_REQUEST`) e da **luz de injeção** (bit 2, `MIL_REQUEST`). Os comandos `l` alteram esses dois bits sem mexer na ECU.
+
+| Comando | Efeito |
+|---|---|
+| `l preheat <0\|1>` | pedido da lâmpada de velas |
+| `l mil <0\|1>` | pedido da luz de injeção |
+| `l off` | desliga e devolve os dois campos à ECU |
+| `l show` | estado e contadores |
+
+O campo que você não comandou continua com o valor que a ECU enviou (aparece como `ecu`). Exemplo de `l show` depois de `l preheat 1`:
+
+```
+# l: ligado, preheat=1 mil=ecu
+# l enviados = 40
+# l falhas = 0
+```
+
+**Como funciona:** igual à velocidade. A cada `0x488` da ECU, o Arduino envia logo em seguida uma cópia com só esses bits ajustados (por exemplo, `43 9A FF 04 00 43 1A 45` com `l preheat 1` vira `43 9A FF 06 00 43 1A 45`). O resto do quadro é o da ECU.
+
+### Avisos
+
+- **Só com o carro parado.**
+- **A lâmpada pode piscar:** a BSI recebe o quadro da ECU e o seu, e pode alternar entre os dois em vez de ficar com o último.
+- **A lâmpada de velas é de motor diesel;** em painel de carro a gasolina ela pode nem existir. A luz de injeção existe em qualquer painel.
+- **`l mil 0` esconde no painel um aviso que a ECU pediu**, o que pode mascarar uma falha real. Use só para teste e volte com `l off`.
 
 ## Configuração
 

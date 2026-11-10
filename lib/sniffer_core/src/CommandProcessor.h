@@ -5,6 +5,7 @@
 #include "EngineDynamics.h"
 #include "Frame.h"
 #include "IdFilter.h"
+#include "LampRequest.h"
 #include "Text.h"
 #include "VehicleSpeed.h"
 
@@ -24,7 +25,8 @@ typedef void (*EmitFn)(const char* text);
 //   t <campo> <valor>   altera um campo do 0x208 (liga o envio se desligado)
 //   t period <ms>       período do envio
 //   v <km/h> | off | show   substitui a velocidade do 0x388 (segue o quadro da ECU)
-// (t e v só existem se o parser recebe o TxState e o SpeedState)
+//   l preheat|mil <0|1> | off | show   substitui pedidos de lâmpada do 0x488
+// (t, v e l só existem se o parser recebe o TxState, o SpeedState e o LampState)
 // IDs em hexadecimal, com ou sem prefixo 0x, de 0 a 7FF. Um comando de filtro
 // que falha não altera a lista. Toda resposta começa com '#'.
 template <uint8_t FN>
@@ -33,12 +35,13 @@ class CommandProcessor {
   static const uint8_t kLineMax = 48;
 
   CommandProcessor(IdFilter<FN>& filter, const Stats& stats, EmitFn emit, TxState* tx = nullptr,
-                   SpeedState* speed = nullptr)
+                   SpeedState* speed = nullptr, LampState* lamp = nullptr)
       : filter_(filter),
         stats_(stats),
         emit_(emit),
         tx_(tx),
         speed_(speed),
+        lamp_(lamp),
         len_(0),
         tooLong_(false) {}
 
@@ -87,8 +90,9 @@ class CommandProcessor {
       if (c == 's') return statsCommand();
       if (c == 't' && tx_ != nullptr) return txCommand(tok + 1, (uint8_t)(n - 1));
       if (c == 'v' && speed_ != nullptr) return speedCommand(tok + 1, (uint8_t)(n - 1));
+      if (c == 'l' && lamp_ != nullptr) return lampCommand(tok + 1, (uint8_t)(n - 1));
     }
-    say(PSTR("# erro: comando desconhecido (use f, s, t ou v)"));
+    say(PSTR("# erro: comando desconhecido (use f, s, t, v ou l)"));
   }
 
   void filterCommand(char** a, uint8_t n) {
@@ -378,6 +382,87 @@ class CommandProcessor {
     reportCounter(PSTR("# v falhas = "), speed_->failed);
   }
 
+  // --- comandos l (pedidos de lâmpada do 0x488) ---
+
+  void lampCommand(char** a, uint8_t n) {
+    if (n == 0) {
+      say(PSTR("# erro: uso: l preheat <0|1> | l mil <0|1> | l off | l show"));
+      return;
+    }
+    const char* sub = a[0];
+    const bool isOff = equalsNoCase(sub, "off");
+    if (isOff || equalsNoCase(sub, "show")) {
+      if (n != 1) {
+        lampBadArgs();
+      } else if (isOff) {
+        lamp_->clear();
+        say(PSTR("# l desligado"));
+      } else {
+        lampShow();
+      }
+      return;
+    }
+
+    int8_t* field;
+    const char* name;
+    if (equalsNoCase(sub, "preheat")) {
+      field = &lamp_->preheat;
+      name = "preheat";
+    } else if (equalsNoCase(sub, "mil")) {
+      field = &lamp_->mil;
+      name = "mil";
+    } else {
+      say(PSTR("# erro: campo l desconhecido (preheat, mil, off, show)"));
+      return;
+    }
+    if (n != 2) {
+      lampBadArgs();
+      return;
+    }
+    long v;
+    if (!parseInt(a[1], v) || (v != 0 && v != 1)) {
+      char buf[48];
+      char* p = text::putStrP(buf, PSTR("# erro: valor invalido para "));
+      p = text::putStr(p, name);
+      p = text::putStrP(p, PSTR(" (0..1)"));
+      *p = '\0';
+      emit_(buf);
+      return;
+    }
+    *field = (int8_t)v;
+    lamp_->active = true;
+
+    char buf[72];
+    char* p = text::putStrP(buf, PSTR("# l ligado: "));
+    p = putLampFields(p);
+    p = text::putStrP(p, PSTR(" (segue o 0x488 da ECU)"));
+    *p = '\0';
+    emit_(buf);
+  }
+
+  void lampBadArgs() { say(PSTR("# erro: argumentos invalidos para l")); }
+
+  static char* putLampField(char* p, int8_t v) {
+    return v < 0 ? text::putStrP(p, PSTR("ecu")) : text::putUint(p, (uint32_t)v);
+  }
+
+  char* putLampFields(char* p) const {
+    p = text::putStrP(p, PSTR("preheat="));
+    p = putLampField(p, lamp_->preheat);
+    p = text::putStrP(p, PSTR(" mil="));
+    return putLampField(p, lamp_->mil);
+  }
+
+  void lampShow() {
+    char buf[64];
+    char* p = text::putStrP(buf, lamp_->active ? PSTR("# l: ligado, ") : PSTR("# l: desligado, "));
+    p = putLampFields(p);
+    *p = '\0';
+    emit_(buf);
+    reportCounter(PSTR("# l enviados = "), lamp_->sent);
+    reportCounter(PSTR("# l falhas = "), lamp_->failed);
+  }
+
   // Inteiro decimal com sinal opcional, até 6 dígitos.
   static bool parseInt(const char* s, long& out) {
     bool neg = false;
@@ -431,6 +516,7 @@ class CommandProcessor {
   EmitFn emit_;
   TxState* tx_;
   SpeedState* speed_;
+  LampState* lamp_;
   char line_[kLineMax + 1];
   uint8_t len_;
   bool tooLong_;
