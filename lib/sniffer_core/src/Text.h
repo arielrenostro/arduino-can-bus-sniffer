@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#include "Flash.h"
+
 // Montagem de texto sem printf/String (economiza flash e RAM no AVR).
 // Cada função escreve em `p` e devolve o ponteiro logo após o que escreveu.
 namespace sniffer {
@@ -9,6 +11,13 @@ namespace text {
 
 inline char* putStr(char* p, const char* s) {
   while (*s) *p++ = *s++;
+  return p;
+}
+
+// Igual a putStr, para texto na flash (use com PSTR("...")).
+inline char* putStrP(char* p, const char* flash) {
+  char c;
+  while ((c = (char)pgm_read_byte(flash++)) != '\0') *p++ = c;
   return p;
 }
 
@@ -22,6 +31,15 @@ inline char* putUint(char* p, uint32_t v) {
   } while (v);
   while (n) *p++ = tmp[--n];
   return p;
+}
+
+// Decimal com sinal.
+inline char* putInt(char* p, long v) {
+  if (v < 0) {
+    *p++ = '-';
+    return putUint(p, (uint32_t)(-v));
+  }
+  return putUint(p, (uint32_t)v);
 }
 
 // Hexadecimal maiúsculo com exatamente `digits` dígitos (completa com zeros).

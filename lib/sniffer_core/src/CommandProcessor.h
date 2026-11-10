@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#include "EngineDynamics.h"
 #include "Frame.h"
 #include "IdFilter.h"
 #include "Text.h"
@@ -18,6 +19,10 @@ typedef void (*EmitFn)(const char* text);
 //   f +<id> [+<id> ...] adiciona IDs     f -<id> [-<id> ...]  remove IDs
 //   f off               exibe todos os IDs
 //   s                   estado do filtro e contadores
+//   t on | off | show   liga, desliga e mostra o envio do 0x208
+//   t <campo> <valor>   altera um campo do 0x208 (liga o envio se desligado)
+//   t period <ms>       período do envio
+// (os comandos t só existem se o parser recebe um TxState)
 // IDs em hexadecimal, com ou sem prefixo 0x, de 0 a 7FF. Um comando de filtro
 // que falha não altera a lista. Toda resposta começa com '#'.
 template <uint8_t FN>
@@ -25,8 +30,8 @@ class CommandProcessor {
  public:
   static const uint8_t kLineMax = 48;
 
-  CommandProcessor(IdFilter<FN>& filter, const Stats& stats, EmitFn emit)
-      : filter_(filter), stats_(stats), emit_(emit), len_(0), tooLong_(false) {}
+  CommandProcessor(IdFilter<FN>& filter, const Stats& stats, EmitFn emit, TxState* tx = nullptr)
+      : filter_(filter), stats_(stats), emit_(emit), tx_(tx), len_(0), tooLong_(false) {}
 
   void feed(char c) {
     if (c == '\r' || c == '\n') {
@@ -46,7 +51,7 @@ class CommandProcessor {
     if (tooLong_) {
       tooLong_ = false;
       len_ = 0;
-      emit_("# erro: linha muito longa");
+      say(PSTR("# erro: linha muito longa"));
       return;
     }
     if (len_ == 0) return;
@@ -71,13 +76,14 @@ class CommandProcessor {
       char c = (char)(tok[0][0] | 0x20);  // minúscula
       if (c == 'f') return filterCommand(tok + 1, (uint8_t)(n - 1));
       if (c == 's') return statsCommand();
+      if (c == 't' && tx_ != nullptr) return txCommand(tok + 1, (uint8_t)(n - 1));
     }
-    emit_("# erro: comando desconhecido (use f ou s)");
+    say(PSTR("# erro: comando desconhecido (use f, s ou t)"));
   }
 
   void filterCommand(char** a, uint8_t n) {
     if (n == 0) {
-      emit_("# erro: uso: f <id>... | f +<id> | f -<id> | f off");
+      say(PSTR("# erro: uso: f <id>... | f +<id> | f -<id> | f off"));
       return;
     }
     if (n == 1 && equalsNoCase(a[0], "off")) {
@@ -100,14 +106,14 @@ class CommandProcessor {
       const char* t = a[i];
       const bool hasSign = isSign(t[0]);
       if (hasSign != signedMode) {
-        emit_("# erro: nao misture IDs com e sem sinal (+/-)");
+        say(PSTR("# erro: nao misture IDs com e sem sinal (+/-)"));
         return;
       }
       char sign = 0;
       if (hasSign) sign = *t++;
       uint16_t id;
       if (!parseId(t, id)) {
-        emit_("# erro: ID invalido (hexadecimal, no maximo 7FF)");
+        say(PSTR("# erro: ID invalido (hexadecimal, no maximo 7FF)"));
         return;
       }
       FilterResult r = (sign == '-') ? next.remove(id) : next.add(id);
@@ -122,18 +128,18 @@ class CommandProcessor {
 
   void statsCommand() {
     reportFilter();
-    reportCounter("# recebidos = ", stats_.received);
-    reportCounter("# exibidos = ", stats_.shown);
-    reportCounter("# perdidos = ", stats_.lost);
+    reportCounter(PSTR("# recebidos = "), stats_.received);
+    reportCounter(PSTR("# exibidos = "), stats_.shown);
+    reportCounter(PSTR("# perdidos = "), stats_.lost);
   }
 
   void reportFilter() {
     if (!filter_.active()) {
-      emit_("# filtro: desativado");
+      say(PSTR("# filtro: desativado"));
       return;
     }
     char buf[10 + 4 * FN];
-    char* p = text::putStr(buf, "# filtro:");
+    char* p = text::putStrP(buf, PSTR("# filtro:"));
     for (uint8_t i = 0; i < filter_.count(); i++) {
       *p++ = ' ';
       p = text::putHex(p, filter_.at(i), 3);
@@ -142,9 +148,9 @@ class CommandProcessor {
     emit_(buf);
   }
 
-  void reportCounter(const char* label, uint32_t value) {
+  void reportCounter(const char* flashLabel, uint32_t value) {
     char buf[32];
-    char* p = text::putStr(buf, label);
+    char* p = text::putStrP(buf, flashLabel);
     p = text::putUint(p, value);
     *p = '\0';
     emit_(buf);
@@ -152,11 +158,185 @@ class CommandProcessor {
 
   void tooMany() {
     char buf[48];
-    char* p = text::putStr(buf, "# erro: capacidade excedida (maximo ");
+    char* p = text::putStrP(buf, PSTR("# erro: capacidade excedida (maximo "));
     p = text::putUint(p, FN);
-    p = text::putStr(p, " IDs)");
+    p = text::putStrP(p, PSTR(" IDs)"));
     *p = '\0';
     emit_(buf);
+  }
+
+  // Emite um texto fixo que está na flash (PSTR).
+  void say(const char* flashMsg) {
+    char buf[120];
+    char* p = text::putStrP(buf, flashMsg);
+    *p = '\0';
+    emit_(buf);
+  }
+
+  // --- comandos t (envio do 0x208) ---
+
+  struct FieldSpec {
+    const char* name;
+    TxField field;
+    int16_t min;
+    int16_t max;
+  };
+
+  void txCommand(char** a, uint8_t n) {
+    if (n == 0) {
+      say(PSTR("# erro: uso: t on | off | show | period <ms> | <campo> <valor>"));
+      return;
+    }
+    const char* sub = a[0];
+
+    if (equalsNoCase(sub, "on")) {
+      if (n != 1) return txBadArgs();
+      if (!tx_->active) {
+        tx_->dyn.reset();
+        tx_->active = true;
+      }
+      reportTx();
+      return;
+    }
+    if (equalsNoCase(sub, "off")) {
+      if (n != 1) return txBadArgs();
+      tx_->active = false;
+      say(PSTR("# tx desligado (somente escuta)"));
+      return;
+    }
+    if (equalsNoCase(sub, "show")) {
+      if (n != 1) return txBadArgs();
+      txShow();
+      return;
+    }
+    if (equalsNoCase(sub, "period")) {
+      if (n != 2) return txBadArgs();
+      long ms;
+      if (!parseInt(a[1], ms) || ms < 2 || ms > 5000) {
+        say(PSTR("# erro: periodo invalido (2..5000 ms)"));
+        return;
+      }
+      tx_->periodMs = (uint16_t)ms;
+      char buf[32];
+      char* p = text::putStrP(buf, PSTR("# tx periodo = "));
+      p = text::putUint(p, tx_->periodMs);
+      p = text::putStrP(p, PSTR(" ms"));
+      *p = '\0';
+      emit_(buf);
+      return;
+    }
+
+    static const FieldSpec kFields[] = {
+        {"rpm", TxField::Rpm, 0, 8191},   {"torque", TxField::Torque, -100, 408},
+        {"pedal", TxField::Pedal, 0, 100}, {"cruise", TxField::Cruise, 0, 3},
+        {"brake", TxField::Brake, 0, 1},   {"ac", TxField::Ac, 0, 1},
+        {"diag", TxField::Diag, 0, 1},
+    };
+    for (uint8_t i = 0; i < sizeof(kFields) / sizeof(kFields[0]); i++) {
+      if (!equalsNoCase(sub, kFields[i].name)) continue;
+      if (n != 2) return txBadArgs();
+      long v;
+      // Valida tudo numa cópia: um valor inválido não liga o envio nem altera o quadro.
+      EngineDynamics next = tx_->dyn;
+      if (!tx_->active) next.reset();
+      if (!parseInt(a[1], v) || !next.set(kFields[i].field, v)) {
+        txBadValue(kFields[i]);
+        return;
+      }
+      tx_->dyn = next;
+      tx_->active = true;
+      reportTx();
+      return;
+    }
+    say(PSTR("# erro: campo t desconhecido (on, off, show, period, rpm, torque, pedal, cruise, brake, ac, diag)"));
+  }
+
+  void txBadArgs() { say(PSTR("# erro: argumentos invalidos para t")); }
+
+  void txBadValue(const FieldSpec& f) {
+    char buf[64];
+    char* p = text::putStrP(buf, PSTR("# erro: valor invalido para "));
+    p = text::putStr(p, f.name);
+    p = text::putStrP(p, PSTR(" ("));
+    p = text::putInt(p, f.min);
+    p = text::putStrP(p, PSTR(".."));
+    p = text::putInt(p, f.max);
+    p = text::putStrP(p, PSTR(")"));
+    *p = '\0';
+    emit_(buf);
+  }
+
+  static char* putFrameHex(char* p, const EngineDynamics& d) {
+    uint8_t bytes[8];
+    d.encode(bytes);
+    for (uint8_t i = 0; i < 8; i++) {
+      if (i) *p++ = ' ';
+      p = text::putHex(p, bytes[i], 2);
+    }
+    return p;
+  }
+
+  void reportTx() {
+    char buf[80];
+    char* p = text::putStrP(buf, tx_->active ? PSTR("# tx ligado, periodo ") : PSTR("# tx desligado, periodo "));
+    p = text::putUint(p, tx_->periodMs);
+    p = text::putStrP(p, PSTR(" ms, quadro: "));
+    p = putFrameHex(p, tx_->dyn);
+    *p = '\0';
+    emit_(buf);
+  }
+
+  void txShow() {
+    char buf[96];
+    char* p = text::putStrP(buf, tx_->active ? PSTR("# tx: ligado, periodo = ") : PSTR("# tx: desligado, periodo = "));
+    p = text::putUint(p, tx_->periodMs);
+    p = text::putStrP(p, PSTR(" ms"));
+    *p = '\0';
+    emit_(buf);
+
+    const EngineDynamics& d = tx_->dyn;
+    p = text::putStrP(buf, PSTR("# tx campos: rpm="));
+    p = text::putUint(p, d.rpm());
+    p = text::putStrP(p, PSTR(" torque="));
+    p = text::putInt(p, d.torqueNm());
+    p = text::putStrP(p, PSTR(" pedal="));
+    p = text::putUint(p, d.pedal());
+    p = text::putStrP(p, PSTR(" cruise="));
+    p = text::putUint(p, d.cruise());
+    p = text::putStrP(p, PSTR(" brake="));
+    p = text::putUint(p, d.brake() ? 1 : 0);
+    p = text::putStrP(p, PSTR(" ac="));
+    p = text::putUint(p, d.ac() ? 1 : 0);
+    p = text::putStrP(p, PSTR(" diag="));
+    p = text::putUint(p, d.diag() ? 1 : 0);
+    *p = '\0';
+    emit_(buf);
+
+    p = text::putStrP(buf, PSTR("# tx quadro: "));
+    p = putFrameHex(p, d);
+    *p = '\0';
+    emit_(buf);
+
+    reportCounter(PSTR("# tx enviados = "), tx_->sent);
+    reportCounter(PSTR("# tx falhas = "), tx_->failed);
+  }
+
+  // Inteiro decimal com sinal opcional, até 6 dígitos.
+  static bool parseInt(const char* s, long& out) {
+    bool neg = false;
+    if (*s == '-' || *s == '+') {
+      neg = (*s == '-');
+      ++s;
+    }
+    if (*s == '\0') return false;
+    long v = 0;
+    uint8_t digits = 0;
+    for (; *s; ++s) {
+      if (*s < '0' || *s > '9' || ++digits > 6) return false;
+      v = v * 10 + (*s - '0');
+    }
+    out = neg ? -v : v;
+    return true;
   }
 
   static bool isSign(char c) { return c == '+' || c == '-'; }
@@ -192,6 +372,7 @@ class CommandProcessor {
   IdFilter<FN>& filter_;
   const Stats& stats_;
   EmitFn emit_;
+  TxState* tx_;
   char line_[kLineMax + 1];
   uint8_t len_;
   bool tooLong_;

@@ -14,11 +14,11 @@
 
 ## 3. Firmware do Nano
 
-- [ ] 3.1 Em `src/main.cpp`, inicializar o MCP2515 (250 kbit/s, 8 MHz, listen-only, aceitando todos os IDs) e emitir a mensagem de início ou o erro de inicialização com prefixo `#`; verificar com `pio run` e, na bancada, observando a mensagem no monitor serial (specs `can-bus-capture`, `serial-frame-output`)
-- [ ] 3.2 Implementar o laço principal: drenar o MCP2515 quando INT estiver em nível baixo para o ring, contar recebidos e perdidos (inclusive estouro do controlador), e emitir linhas só quando `Serial.availableForWrite()` comportar a linha; verificar na bancada com um gerador de tráfego CAN (ou no carro) que o contador de perdidos fica em zero com filtro desativado
-- [ ] 3.3 Ligar a leitura de comandos da serial ao filtro e ao relatório `s`; verificar no monitor serial os cenários `f 412 208`, `f +388`, `f -388`, `f off`, `f 800` e `s`
+- [x] 3.1 Em `src/main.cpp`, inicializar o MCP2515 (250 kbit/s, 8 MHz, listen-only, aceitando todos os IDs) e emitir a mensagem de início ou o erro de inicialização com prefixo `#`; verificar com `pio run` e, na bancada, observando a mensagem no monitor serial (specs `can-bus-capture`, `serial-frame-output`)
+- [x] 3.2 Implementar o laço principal: drenar o MCP2515 quando INT estiver em nível baixo para o ring, contar recebidos e perdidos (inclusive estouro do controlador), e emitir linhas só quando `Serial.availableForWrite()` comportar a linha; verificar na bancada com um gerador de tráfego CAN (ou no carro) que o contador de perdidos fica em zero com filtro desativado
+- [x] 3.3 Ligar a leitura de comandos da serial ao filtro e ao relatório `s`; verificar no monitor serial os cenários `f 412 208`, `f +388`, `f -388`, `f off`, `f 800` e `s`
 
 ## 4. Documentação e validação em campo
 
-- [ ] 4.1 Escrever `README.md` com ligação (CS/SI/SO/SCK/INT), jumper de 120 Ω aberto, GND comum, aviso HS.IS (CAN) versus VAN, comandos, formato de saída e troca de cristal/baud; verificar seguindo o README do zero até ver quadros no monitor
-- [ ] 4.2 Validar no carro: ignição ligada, sem filtro, `s` mostra `perdidos = 0`; com `f 412 208`, só esses IDs aparecem e os campos de `0x412` batem com o mapeamento do PSA-RE (`CRUISE_CONTROL_ON`, `BRAKE_PEDAL_MAIN_SWITCH`)
+- [x] 4.1 Escrever `README.md` com ligação (CS/SI/SO/SCK/INT), jumper de 120 Ω aberto, GND comum, aviso HS.IS (CAN) versus VAN, comandos, formato de saída e troca de cristal/baud; verificar seguindo o README do zero até ver quadros no monitor
+- [x] 4.2 Validar no carro: ignição ligada, sem filtro, `s` mostra `perdidos = 0`; com `f 412 208`, só esses IDs aparecem e os campos de `0x412` batem com o mapeamento do PSA-RE (`CRUISE_CONTROL_ON`, `BRAKE_PEDAL_MAIN_SWITCH`)

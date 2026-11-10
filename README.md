@@ -1,6 +1,6 @@
 # can-sniffer
 
-Sniffer CAN passivo (somente escuta) para o barramento **HS.IS** do Peugeot 206 (AEE2001, 250 kbit/s), com Arduino Nano + módulo MCP2515. Mostra todos os quadros no monitor serial e permite filtrar por ID em tempo de execução.
+Sniffer CAN para o barramento **HS.IS** do Peugeot 206 (AEE2001, 250 kbit/s), com Arduino Nano + módulo MCP2515. Mostra todos os quadros no monitor serial e permite filtrar por ID em tempo de execução.
 
 Objetivo: observar o que a BSI e a ECU trocam sobre o controle de cruzeiro (por exemplo `0x412`, enviado pela BSI, e `0x208`, enviado pela ECU), antes de simular o `0x208`.
 
@@ -22,7 +22,7 @@ Antes de ligar ao carro:
 - **Jumper de 120 Ω do módulo (geralmente J1): deixe aberto.** O barramento já é terminado nas duas pontas; uma terminação extra carrega a linha e prejudica a leitura.
 - **GND comum:** o GND do módulo precisa ser o mesmo do carro.
 - **Barramento certo:** o MCP2515 só lê **CAN**. O barramento de conforto do 206 é **VAN** (125 kbit/s), que não é CAN. Ligue no HS.IS (CAN H/L a 250 kbit/s nesta arquitetura; outras arquiteturas PSA usam 500 kbit/s).
-- O firmware só escuta: não transmite quadros, nem ACK, nem quadros de erro.
+- O firmware **inicia sempre em somente escuta**: não transmite quadros, nem ACK, nem quadros de erro. Só transmite depois de um comando `t` (ver "Enviando o 0x208").
 
 ## Uso
 
@@ -34,7 +34,7 @@ pio device monitor       # 500000 baud (monitor_speed já está no platformio.in
 Ao iniciar, aparece:
 
 ```
-# can-sniffer: captura a 250 kbit/s, cristal 8 MHz, somente escuta (f = filtro, s = estado)
+# can-sniffer: captura a 250 kbit/s, cristal 8 MHz, somente escuta (f = filtro, s = estado, t = enviar 0x208)
 ```
 
 Cada quadro vira uma linha `<ms> <ID> [<n>] <bytes em hex>`:
@@ -61,6 +61,46 @@ Remover o último ID da lista desativa o filtro. Um comando inválido (ID acima 
 ### Contador de perdidos
 
 `perdidos` soma os quadros descartados porque o buffer interno encheu ou o MCP2515 estourou. Se for maior que zero, os dados estão incompletos: use `f <ids>` para reduzir a saída. Os estouros do MCP2515 são contados uma vez por ocorrência de flag, então o número é um mínimo.
+
+## Enviando o 0x208
+
+Gera o quadro `0x208` (ENGINE_DYNAMICS, normalmente enviado pela ECU) para ver como a BSI e o painel reagem. **Só o ID `0x208` pode ser enviado.**
+
+Todo envio começa do quadro de referência capturado com o motor em marcha lenta:
+
+```
+1F 58 2D 00 40 2D 2D 2D      1003 rpm, torque -10 Nm, pedal 0%, cruise 0, freio 0, A/C 0, DIAG 1
+```
+
+O primeiro comando de campo já liga o envio: `t cruise 2` envia a referência com o cruise em 2 (`... 00 48 ...`).
+
+| Comando | Efeito | Codificação |
+|---|---|---|
+| `t on` | liga o envio com a referência | |
+| `t off` | para e volta a somente escuta | |
+| `t rpm <0..8191>` | rotação | rpm × 8, bytes 1-2 |
+| `t torque <-100..408>` | torque em Nm | (Nm + 100) / 2, bytes 3, 6, 7 e 8 |
+| `t pedal <0..100>` | acelerador em % | % × 2, byte 4 |
+| `t cruise <0..3>` | estado do cruise | byte 5, bits 3-2 |
+| `t brake <0\|1>` | contato secundário do freio | byte 5, bit 1 |
+| `t ac <0\|1>` | pedido do compressor do A/C | byte 5, bit 0 |
+| `t diag <0\|1>` | `DIAG_MUX_ON` | byte 5, bit 6 |
+| `t period <ms>` | período do envio (2..5000, padrão 10) | não liga o envio |
+| `t show` | estado, campos, quadro em hex e contadores | |
+
+- Com o envio ligado, um comando de campo altera só aquele campo; os demais continuam.
+- Depois de `t off`, o próximo envio volta a partir da referência (o período é mantido).
+- Valores inválidos são rejeitados e não alteram o quadro nem ligam o envio.
+- `t torque 110` produz `0x69`, o valor visto com o motor parado. O torque tem resolução de 2 Nm.
+- Os valores de `t cruise` seguem a tabela do AEE2010 (0 espera, 1 retomado pelo pedal, 2 ativo, 3 inibido); não estão confirmados para o 206.
+- `t show` mostra enviados e falhas; falha é um quadro que não coube nos buffers de envio do MCP2515 (por exemplo, ninguém dando ACK).
+
+### Avisos
+
+- **Só com o carro parado.** A caixa automática (BVA), se houver, também recebe o `0x208`.
+- **A ECU também envia o `0x208`.** Dois nós enviando o mesmo ID causam erros de bit e retransmissões, e a BSI recebe valores alternados (o da ECU e o seu). Se isso atrapalhar, pare o `0x208` na ECU ou tire-a do barramento.
+- Enquanto envia, o MCP2515 fica em **modo normal**: dá ACK aos quadros dos outros nós e pode gerar quadros de erro.
+- "Cruise ativo" aqui só informa o painel; quem regula a velocidade é a ECU.
 
 ## Configuração
 
