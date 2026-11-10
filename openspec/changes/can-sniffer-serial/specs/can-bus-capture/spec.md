@@ -7,7 +7,7 @@ Capturar de forma passiva os quadros CAN do barramento HS.IS do veículo, sem in
 ## ADDED Requirements
 
 ### Requirement: Captura passiva do barramento
-O sistema SHALL receber quadros CAN no barramento a 500 kbit/s sem transmitir nenhum quadro, nem confirmação (ACK) nem quadro de erro, de forma a não interferir no tráfego do veículo.
+O sistema SHALL receber quadros CAN no barramento a 250 kbit/s sem transmitir nenhum quadro, nem confirmação (ACK) nem quadro de erro, de forma a não interferir no tráfego do veículo.
 
 #### Scenario: Barramento ativo
 - **WHEN** o dispositivo está conectado ao barramento HS.IS com as ECUs transmitindo

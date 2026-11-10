@@ -3,7 +3,7 @@
 ## 1. Projeto e configuração
 
 - [x] 1.1 Adicionar a dependência `autowp/arduino-mcp2515` e `monitor_speed = 500000` ao `platformio.ini`, e um env `native` com Unity para testes no PC; verificar com `pio run` (build do Nano) e `pio test -e native` (executa sem erro de configuração)
-- [x] 1.2 Criar `include/config.h` com cristal (8 MHz), bitrate (500 kbit/s), pinos (CS=D10, INT=D3), baud (500000) e capacidades (ring de 32, filtro de 16); verificar que `pio run` compila usando as constantes
+- [x] 1.2 Criar `include/config.h` com cristal (8 MHz), bitrate (250 kbit/s), pinos (CS=D10, INT=D3), baud (500000) e capacidades (ring de 32, filtro de 16); verificar que `pio run` compila usando as constantes
 
 ## 2. Lógica pura (`lib/sniffer_core`, sem dependência do Arduino)
 
@@ -14,7 +14,7 @@
 
 ## 3. Firmware do Nano
 
-- [ ] 3.1 Em `src/main.cpp`, inicializar o MCP2515 (500 kbit/s, 8 MHz, listen-only, aceitando todos os IDs) e emitir a mensagem de início ou o erro de inicialização com prefixo `#`; verificar com `pio run` e, na bancada, observando a mensagem no monitor serial (specs `can-bus-capture`, `serial-frame-output`)
+- [ ] 3.1 Em `src/main.cpp`, inicializar o MCP2515 (250 kbit/s, 8 MHz, listen-only, aceitando todos os IDs) e emitir a mensagem de início ou o erro de inicialização com prefixo `#`; verificar com `pio run` e, na bancada, observando a mensagem no monitor serial (specs `can-bus-capture`, `serial-frame-output`)
 - [ ] 3.2 Implementar o laço principal: drenar o MCP2515 quando INT estiver em nível baixo para o ring, contar recebidos e perdidos (inclusive estouro do controlador), e emitir linhas só quando `Serial.availableForWrite()` comportar a linha; verificar na bancada com um gerador de tráfego CAN (ou no carro) que o contador de perdidos fica em zero com filtro desativado
 - [ ] 3.3 Ligar a leitura de comandos da serial ao filtro e ao relatório `s`; verificar no monitor serial os cenários `f 412 208`, `f +388`, `f -388`, `f off`, `f 800` e `s`
 

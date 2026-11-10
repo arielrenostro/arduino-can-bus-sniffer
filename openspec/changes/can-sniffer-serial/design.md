@@ -5,7 +5,7 @@
 Ver `proposal.md` (Why) para a motivação. Restrições que moldam a abordagem:
 
 - **Alvo:** Arduino Nano (ATmega328, 16 MHz, 2 KB de RAM, 32 KB de flash), board `nanoatmega328new`, framework Arduino, PlatformIO. O projeto hoje só tem o template em `src/main.cpp`.
-- **Barramento:** HS.IS a 500 kbit/s. Os quadros periódicos já mapeados no PSA-RE (0x208 a 100/s, 0x349 a 50/s, 0x388/0x389/0x38D/0x44D a 25/s cada, 0x412, 0x488, 0x489, 0x50E e outros) somam algumas centenas de quadros por segundo; com os demais IDs, o pico real deve ficar acima disso.
+- **Barramento:** HS.IS a 250 kbit/s (`architectures.yml` do PSA-RE para AEE2001; outras arquiteturas PSA usam 500 kbit/s no HS). Os quadros periódicos já mapeados no PSA-RE (0x208 a 100/s, 0x349 a 50/s, 0x388/0x389/0x38D/0x44D a 25/s cada, 0x412, 0x488, 0x489, 0x50E e outros) somam algumas centenas de quadros por segundo; com os demais IDs, o pico real deve ficar acima disso.
 - **Fiação confirmada:** CS=D10, SI=D11 (MOSI), SO=D12 (MISO), SCK=D13, INT=D3. Cristal marcado EAS8000, assumido como 8,000 MHz.
 - **Gargalo:** o MCP2515 tem só 2 buffers de recepção e o `Serial` do AVR tem 64 bytes de buffer de transmissão. Uma impressão que bloqueie por mais que ~0,5 ms (tempo de 2 quadros de 8 bytes) já arrisca perder quadros. A 115200 baud não cabe o tráfego em texto; a 500000 baud (50 KB/s) cabe com folga.
 
@@ -35,7 +35,7 @@ Cada entrada tem ID (2 B), comprimento (1 B), dados (8 B) e carimbo de tempo `mi
 *Nota:* o carimbo é tirado quando o quadro é lido do controlador, não no instante em que chegou ao barramento; o erro é da ordem do atraso do drain (normalmente bem abaixo de 1 ms).
 
 **4. Biblioteca `autowp/arduino-mcp2515`.**
-API enxuta (`setBitrate(CAN_500KBPS, MCP_8MHZ)`, `setListenOnlyMode()`, `readMessage()`), suporta os 500 kbit/s com cristal de 8 MHz. Configuração do controlador para aceitar todos os IDs (máscaras zeradas). Estouro do buffer do controlador é verificado por flag de erro (EFLG) e contado em `lost`.
+API enxuta (`setBitrate(CAN_250KBPS, MCP_8MHZ)`, `setListenOnlyMode()`, `readMessage()`), suporta os 250 kbit/s com cristal de 8 MHz. Configuração do controlador para aceitar todos os IDs (máscaras zeradas). Estouro do buffer do controlador é verificado por flag de erro (EFLG) e contado em `lost`.
 *Alternativas:* `coryjfowler/MCP_CAN_lib` (muito usada, mais código e semântica de filtros diferente); driver SPI próprio (controle total, mas é trabalho a mais sem benefício agora).
 
 **5. Filtro em software, lista de até 16 IDs.**

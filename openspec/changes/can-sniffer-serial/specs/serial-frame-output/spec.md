@@ -48,7 +48,7 @@ O sistema SHALL emitir ao iniciar uma linha identificando o programa, a velocida
 
 #### Scenario: Inicialização bem-sucedida
 - **WHEN** o sistema inicia e o controlador CAN é configurado
-- **THEN** uma linha informa que a captura começou a 500 kbit/s em modo somente escuta
+- **THEN** uma linha informa que a captura começou a 250 kbit/s em modo somente escuta
 
 ### Requirement: Distinção entre quadros e mensagens do sistema
 O sistema SHALL iniciar toda mensagem de sistema (respostas de comando, erros, relatório) com o prefixo `#`, para distingui-las das linhas de quadro.

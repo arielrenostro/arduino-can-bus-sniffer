@@ -1,6 +1,6 @@
 # can-sniffer
 
-Sniffer CAN passivo (somente escuta) para o barramento **HS.IS** do Peugeot 206 (AEE2001, 500 kbit/s), com Arduino Nano + módulo MCP2515. Mostra todos os quadros no monitor serial e permite filtrar por ID em tempo de execução.
+Sniffer CAN passivo (somente escuta) para o barramento **HS.IS** do Peugeot 206 (AEE2001, 250 kbit/s), com Arduino Nano + módulo MCP2515. Mostra todos os quadros no monitor serial e permite filtrar por ID em tempo de execução.
 
 Objetivo: observar o que a BSI e a ECU trocam sobre o controle de cruzeiro (por exemplo `0x412`, enviado pela BSI, e `0x208`, enviado pela ECU), antes de simular o `0x208`.
 
@@ -21,7 +21,7 @@ Antes de ligar ao carro:
 
 - **Jumper de 120 Ω do módulo (geralmente J1): deixe aberto.** O barramento já é terminado nas duas pontas; uma terminação extra carrega a linha e prejudica a leitura.
 - **GND comum:** o GND do módulo precisa ser o mesmo do carro.
-- **Barramento certo:** o MCP2515 só lê **CAN**. O barramento de conforto do 206 é **VAN** (125 kbit/s), que não é CAN. Ligue no HS.IS (CAN H/L a 500 kbit/s).
+- **Barramento certo:** o MCP2515 só lê **CAN**. O barramento de conforto do 206 é **VAN** (125 kbit/s), que não é CAN. Ligue no HS.IS (CAN H/L a 250 kbit/s nesta arquitetura; outras arquiteturas PSA usam 500 kbit/s).
 - O firmware só escuta: não transmite quadros, nem ACK, nem quadros de erro.
 
 ## Uso
@@ -34,7 +34,7 @@ pio device monitor       # 500000 baud (monitor_speed já está no platformio.in
 Ao iniciar, aparece:
 
 ```
-# can-sniffer: captura a 500 kbit/s, cristal 8 MHz, somente escuta (f = filtro, s = estado)
+# can-sniffer: captura a 250 kbit/s, cristal 8 MHz, somente escuta (f = filtro, s = estado)
 ```
 
 Cada quadro vira uma linha `<ms> <ID> [<n>] <bytes em hex>`:

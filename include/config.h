@@ -7,9 +7,10 @@
 // Se nenhum quadro aparecer, tente MCP_16MHZ.
 #define CFG_CAN_CLOCK MCP_8MHZ
 #define CFG_CAN_CLOCK_MHZ 8
-// HS.IS do Peugeot 206 (AEE2001): 500 kbit/s.
-#define CFG_CAN_SPEED CAN_500KBPS
-#define CFG_CAN_SPEED_KBPS 500
+// HS.IS do Peugeot 206 (AEE2001): 250 kbit/s, conforme architectures.yml do PSA-RE.
+// (Outras arquiteturas PSA usam 500 kbit/s no HS.)
+#define CFG_CAN_SPEED CAN_250KBPS
+#define CFG_CAN_SPEED_KBPS 250
 
 // --- Pinos (Arduino Nano) ---
 // SI=D11 (MOSI), SO=D12 (MISO), SCK=D13 são os pinos SPI padrão.

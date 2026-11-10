@@ -2,11 +2,11 @@
 
 ## Why
 
-Para simular o envio do quadro `0x208` (ENGINE_DYNAMICS, status do controle de cruzeiro enviado pela ECU), é preciso antes entender o que a BSI e a ECU realmente trafegam no barramento HS.IS (CAN 500 kbit/s) do Peugeot 206. Os mapeamentos do PSA-RE têm lacunas nos sinais de cruzeiro (`CRUISE_CONTROL_BUTTONS` e `CRUISE_CONTROL_ON` no `0x412`, `CRUISE_CONTROL_STATUS` no `0x208`: sem tabela de valores). Falta uma ferramenta de captura passiva para observar o tráfego real e preencher essas lacunas.
+Para simular o envio do quadro `0x208` (ENGINE_DYNAMICS, status do controle de cruzeiro enviado pela ECU), é preciso antes entender o que a BSI e a ECU realmente trafegam no barramento HS.IS (CAN 250 kbit/s na arquitetura AEE2001, segundo o PSA-RE) do Peugeot 206. Os mapeamentos do PSA-RE têm lacunas nos sinais de cruzeiro (`CRUISE_CONTROL_BUTTONS` e `CRUISE_CONTROL_ON` no `0x412`, `CRUISE_CONTROL_STATUS` no `0x208`: sem tabela de valores). Falta uma ferramenta de captura passiva para observar o tráfego real e preencher essas lacunas.
 
 ## What Changes
 
-- Firmware Arduino (PlatformIO, Nano ATmega328 + MCP2515) que captura passivamente quadros CAN do HS.IS a 500 kbit/s, em modo listen-only.
+- Firmware Arduino (PlatformIO, Nano ATmega328 + MCP2515) que captura passivamente quadros CAN do HS.IS a 250 kbit/s, em modo listen-only.
 - Recepção desacoplada do serial: o pino INT do MCP2515 indica quadro pendente, o laço principal o drena para um ring buffer e a saída serial é não bloqueante, para não perder quadros enquanto o serial transmite.
 - Saída textual, uma linha por quadro, pela serial (500000 baud), visualizável no `pio device monitor`.
 - Filtro por ID em software, alterável em runtime por comandos digitados no monitor serial: ver tudo ou só IDs específicos.
@@ -16,7 +16,7 @@ Para simular o envio do quadro `0x208` (ENGINE_DYNAMICS, status do controle de c
 ## Capabilities
 
 ### New Capabilities
-- `can-bus-capture`: recepção passiva e sem perda silenciosa de quadros CAN do HS.IS pelo MCP2515 (listen-only, 500 kbit/s, cristal de 8 MHz, pino INT em D3, buffer em RAM) e contabilização de quadros recebidos e perdidos.
+- `can-bus-capture`: recepção passiva e sem perda silenciosa de quadros CAN do HS.IS pelo MCP2515 (listen-only, 250 kbit/s, cristal de 8 MHz, pino INT em D3, buffer em RAM) e contabilização de quadros recebidos e perdidos.
 - `frame-id-filter`: seleção em runtime dos IDs CAN que serão exibidos (todos ou uma lista), controlada por comandos de texto no serial.
 - `serial-frame-output`: formato da linha de saída por quadro e do relatório de estatísticas/filtros ativos na serial.
 
