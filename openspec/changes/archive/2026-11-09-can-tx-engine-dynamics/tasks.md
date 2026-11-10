@@ -10,8 +10,8 @@
 
 ## 3. Firmware
 
-- [ ] 3.1 Em `src/main.cpp`, trocar o controlador entre somente escuta e modo normal quando `TxState.active` muda (com erro `#` e envio desligado se a troca falhar) e enviar o `0x208` a cada `periodMs` com `micros()` acumulado, contando `sent` e `failed`; verificar com `pio run` (RAM abaixo de 90%) e, na bancada, com `t cruise 2`, `t show` e `t off`, observando o painel e o contador de enviados (spec `engine-dynamics-transmit`, spec modificada `can-bus-capture`)
+- [x] 3.1 Em `src/main.cpp`, trocar o controlador entre somente escuta e modo normal quando `TxState.active` muda (com erro `#` e envio desligado se a troca falhar) e enviar o `0x208` a cada `periodMs` com `micros()` acumulado, contando `sent` e `failed`; verificar com `pio run` (RAM abaixo de 90%) e, na bancada, com `t cruise 2`, `t show` e `t off`, observando o painel e o contador de enviados (spec `engine-dynamics-transmit`, spec modificada `can-bus-capture`)
 
 ## 4. Documentação
 
-- [ ] 4.1 Atualizar o `README.md` com os comandos `t`, o quadro de referência e os avisos (somente com o carro parado; colisão com o `0x208` da ECU; modo normal dá ACK); verificar seguindo o README: `t show` mostra o que o texto descreve
+- [x] 4.1 Atualizar o `README.md` com os comandos `t`, o quadro de referência e os avisos (somente com o carro parado; colisão com o `0x208` da ECU; modo normal dá ACK); verificar seguindo o README: `t show` mostra o que o texto descreve

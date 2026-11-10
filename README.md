@@ -22,7 +22,7 @@ Antes de ligar ao carro:
 - **Jumper de 120 Ω do módulo (geralmente J1): deixe aberto.** O barramento já é terminado nas duas pontas; uma terminação extra carrega a linha e prejudica a leitura.
 - **GND comum:** o GND do módulo precisa ser o mesmo do carro.
 - **Barramento certo:** o MCP2515 só lê **CAN**. O barramento de conforto do 206 é **VAN** (125 kbit/s), que não é CAN. Ligue no HS.IS (CAN H/L a 250 kbit/s nesta arquitetura; outras arquiteturas PSA usam 500 kbit/s).
-- O firmware **inicia sempre em somente escuta**: não transmite quadros, nem ACK, nem quadros de erro. Só transmite depois de um comando `t` (ver "Enviando o 0x208").
+- O firmware **inicia sempre em somente escuta**: não transmite quadros, nem ACK, nem quadros de erro. Só transmite depois de um comando `t` ou `v` (ver "Enviando o 0x208" e "Substituindo a velocidade").
 
 ## Uso
 
@@ -34,7 +34,7 @@ pio device monitor       # 500000 baud (monitor_speed já está no platformio.in
 Ao iniciar, aparece:
 
 ```
-# can-sniffer: captura a 250 kbit/s, cristal 8 MHz, somente escuta (f = filtro, s = estado, t = enviar 0x208)
+# can-sniffer: captura a 250 kbit/s, cristal 8 MHz, somente escuta (f = filtro, s = estado, t = enviar 0x208, v = velocidade)
 ```
 
 Cada quadro vira uma linha `<ms> <ID> [<n>] <bytes em hex>`:
@@ -101,6 +101,33 @@ O primeiro comando de campo já liga o envio: `t cruise 2` envia a referência c
 - **A ECU também envia o `0x208`.** Dois nós enviando o mesmo ID causam erros de bit e retransmissões, e a BSI recebe valores alternados (o da ECU e o seu). Se isso atrapalhar, pare o `0x208` na ECU ou tire-a do barramento.
 - Enquanto envia, o MCP2515 fica em **modo normal**: dá ACK aos quadros dos outros nós e pode gerar quadros de erro.
 - "Cruise ativo" aqui só informa o painel; quem regula a velocidade é a ECU.
+
+## Substituindo a velocidade (0x388)
+
+Neste carro (sem ABS nem caixa automática) a única fonte de velocidade da BSI é o quadro `0x388`, enviado pela ECU: bytes 1-2 velocidade, 3-4 contador de distância, 5 aceleração (parado: `00 00 00 03 AF`). Os comandos `v` fazem a BSI enxergar outra velocidade, sem mexer na ECU.
+
+| Comando | Efeito |
+|---|---|
+| `v <0..300>` | liga a substituição com essa velocidade em km/h (ou altera, se já ligada) |
+| `v off` | desliga |
+| `v show` | estado, velocidade e contadores de enviados e falhas |
+
+Exemplo de `v show`:
+
+```
+# v: ligado, velocidade = 60 km/h
+# v enviados = 250
+# v falhas = 1
+```
+
+**Como funciona:** o Arduino não tem relógio próprio para esse quadro. A cada `0x388` que a ECU envia, ele manda logo em seguida uma **cópia com só a velocidade trocada** (bytes 1-2 = km/h × 100, big-endian; 60 km/h = `17 70`). Assim os dois não disputam o barramento, e o contador de distância e a aceleração continuam sendo os da ECU, então o odômetro do painel **não anda**. Se a ECU não enviar o `0x388`, nada é enviado.
+
+### Avisos
+
+- **Só com o carro parado.** A BSI passa a ver velocidade diferente de zero: o painel, o travamento automático das portas (se habilitado), o limpador e as luzes podem reagir. Não deixe a chave dentro do carro trancado.
+- **A BSI recebe dois `0x388` por ciclo** (o da ECU, com a velocidade dela, e o seu logo depois). Não há garantia de qual ela usa; se o velocímetro não mostrar o valor pedido, avise.
+- **A escala (km/h × 0,01) vem do PSA-RE para outras arquiteturas e não está confirmada para o 206.** Calibre pelo velocímetro: `v 60` deve marcar cerca de 60.
+- Se o **odômetro ou o parcial** mexerem, desligue na hora com `v off`.
 
 ## Configuração
 

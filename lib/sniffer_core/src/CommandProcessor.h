@@ -6,6 +6,7 @@
 #include "Frame.h"
 #include "IdFilter.h"
 #include "Text.h"
+#include "VehicleSpeed.h"
 
 namespace sniffer {
 
@@ -22,7 +23,8 @@ typedef void (*EmitFn)(const char* text);
 //   t on | off | show   liga, desliga e mostra o envio do 0x208
 //   t <campo> <valor>   altera um campo do 0x208 (liga o envio se desligado)
 //   t period <ms>       período do envio
-// (os comandos t só existem se o parser recebe um TxState)
+//   v <km/h> | off | show   substitui a velocidade do 0x388 (segue o quadro da ECU)
+// (t e v só existem se o parser recebe o TxState e o SpeedState)
 // IDs em hexadecimal, com ou sem prefixo 0x, de 0 a 7FF. Um comando de filtro
 // que falha não altera a lista. Toda resposta começa com '#'.
 template <uint8_t FN>
@@ -30,8 +32,15 @@ class CommandProcessor {
  public:
   static const uint8_t kLineMax = 48;
 
-  CommandProcessor(IdFilter<FN>& filter, const Stats& stats, EmitFn emit, TxState* tx = nullptr)
-      : filter_(filter), stats_(stats), emit_(emit), tx_(tx), len_(0), tooLong_(false) {}
+  CommandProcessor(IdFilter<FN>& filter, const Stats& stats, EmitFn emit, TxState* tx = nullptr,
+                   SpeedState* speed = nullptr)
+      : filter_(filter),
+        stats_(stats),
+        emit_(emit),
+        tx_(tx),
+        speed_(speed),
+        len_(0),
+        tooLong_(false) {}
 
   void feed(char c) {
     if (c == '\r' || c == '\n') {
@@ -77,8 +86,9 @@ class CommandProcessor {
       if (c == 'f') return filterCommand(tok + 1, (uint8_t)(n - 1));
       if (c == 's') return statsCommand();
       if (c == 't' && tx_ != nullptr) return txCommand(tok + 1, (uint8_t)(n - 1));
+      if (c == 'v' && speed_ != nullptr) return speedCommand(tok + 1, (uint8_t)(n - 1));
     }
-    say(PSTR("# erro: comando desconhecido (use f, s ou t)"));
+    say(PSTR("# erro: comando desconhecido (use f, s, t ou v)"));
   }
 
   void filterCommand(char** a, uint8_t n) {
@@ -321,6 +331,53 @@ class CommandProcessor {
     reportCounter(PSTR("# tx falhas = "), tx_->failed);
   }
 
+  // --- comandos v (substituição de velocidade do 0x388) ---
+
+  void speedCommand(char** a, uint8_t n) {
+    if (n == 0) {
+      say(PSTR("# erro: uso: v <km/h> | v off | v show"));
+      return;
+    }
+    if (n != 1) {
+      say(PSTR("# erro: argumentos invalidos para v"));
+      return;
+    }
+    if (equalsNoCase(a[0], "off")) {
+      speed_->active = false;
+      say(PSTR("# v desligado"));
+      return;
+    }
+    if (equalsNoCase(a[0], "show")) {
+      speedShow();
+      return;
+    }
+    long kmh;
+    if (!parseInt(a[0], kmh) || kmh < 0 || kmh > (long)kMaxKmh) {
+      say(PSTR("# erro: velocidade invalida (0..300 km/h)"));
+      return;
+    }
+    speed_->kmh = (uint16_t)kmh;
+    speed_->active = true;
+    char buf[64];
+    char* p = text::putStrP(buf, PSTR("# v ligado, "));
+    p = text::putUint(p, speed_->kmh);
+    p = text::putStrP(p, PSTR(" km/h (segue o 0x388 da ECU)"));
+    *p = '\0';
+    emit_(buf);
+  }
+
+  void speedShow() {
+    char buf[64];
+    char* p = text::putStrP(buf, speed_->active ? PSTR("# v: ligado, velocidade = ")
+                                                 : PSTR("# v: desligado, velocidade = "));
+    p = text::putUint(p, speed_->kmh);
+    p = text::putStrP(p, PSTR(" km/h"));
+    *p = '\0';
+    emit_(buf);
+    reportCounter(PSTR("# v enviados = "), speed_->sent);
+    reportCounter(PSTR("# v falhas = "), speed_->failed);
+  }
+
   // Inteiro decimal com sinal opcional, até 6 dígitos.
   static bool parseInt(const char* s, long& out) {
     bool neg = false;
@@ -373,6 +430,7 @@ class CommandProcessor {
   const Stats& stats_;
   EmitFn emit_;
   TxState* tx_;
+  SpeedState* speed_;
   char line_[kLineMax + 1];
   uint8_t len_;
   bool tooLong_;

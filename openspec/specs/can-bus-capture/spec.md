@@ -7,10 +7,10 @@ Capturar de forma passiva os quadros CAN do barramento HS.IS do veículo, sem in
 ## Requirements
 
 ### Requirement: Captura passiva do barramento
-O sistema SHALL receber quadros CAN no barramento a 250 kbit/s sem transmitir nenhum quadro, nem confirmação (ACK) nem quadro de erro, de forma a não interferir no tráfego do veículo.
+O sistema SHALL iniciar em modo somente escuta, recebendo quadros CAN a 250 kbit/s sem transmitir nenhum quadro, nem confirmação (ACK) nem quadro de erro. O sistema SHALL transmitir apenas enquanto o envio do `0x208` estiver ligado (capability `engine-dynamics-transmit`) e SHALL voltar a somente escuta ao desligá-lo.
 
 #### Scenario: Barramento ativo
-- **WHEN** o dispositivo está conectado ao barramento HS.IS com as ECUs transmitindo
+- **WHEN** o dispositivo está conectado ao barramento HS.IS com as ECUs transmitindo e o envio do `0x208` está desligado
 - **THEN** o sistema recebe os quadros transmitidos pelas ECUs
 - **AND** não transmite nenhum quadro no barramento
 
@@ -18,6 +18,15 @@ O sistema SHALL receber quadros CAN no barramento a 250 kbit/s sem transmitir ne
 - **WHEN** o controlador CAN não responde ou não pode ser configurado na inicialização
 - **THEN** o sistema informa o erro pela serial
 - **AND** não inicia a captura
+
+#### Scenario: Captura continua durante o envio
+- **WHEN** o envio do `0x208` está ligado
+- **THEN** o sistema continua recebendo e exibindo os quadros dos outros nós
+
+#### Scenario: Volta a somente escuta
+- **WHEN** o usuário desliga o envio do `0x208`
+- **THEN** o sistema volta ao modo somente escuta
+- **AND** não transmite nenhum quadro
 
 ### Requirement: Recepção sem bloquear a saída
 O sistema SHALL continuar recebendo quadros do barramento enquanto transmite dados pela serial, armazenando temporariamente os quadros recebidos até que possam ser processados.
