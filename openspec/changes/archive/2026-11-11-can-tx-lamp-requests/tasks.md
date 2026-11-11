@@ -10,7 +10,7 @@
 
 ## 3. Firmware
 
-- [ ] 3.1 Em `src/main.cpp`, ao receber um `0x488` com a substituição ligada, enviar a cópia com os bits ajustados (contando `sent` e `failed`), e manter o modo normal enquanto o `0x208`, a velocidade ou as lâmpadas estiverem ligados; verificar com `pio run` (RAM abaixo de 90%) e, na bancada, com `l mil 0` e `l preheat 1`, observando o painel (spec `lamp-request-override`, spec modificada `can-bus-capture`)
+- [x] 3.1 Em `src/main.cpp`, ao receber um `0x488` com a substituição ligada, enviar a cópia com os bits ajustados (contando `sent` e `failed`), e manter o modo normal enquanto o `0x208`, a velocidade ou as lâmpadas estiverem ligados; verificar com `pio run` (RAM abaixo de 90%) e, na bancada, com `l mil 0` e `l preheat 1`, observando o painel (spec `lamp-request-override`, spec modificada `can-bus-capture`)
 
 ## 4. Documentação
 
